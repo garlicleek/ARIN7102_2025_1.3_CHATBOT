@@ -1,7 +1,5 @@
 # PharmaSales Analytics Chatbot System
 
----
-
 ## 📑 Project Overview  
 This project implements an **intelligent pharmacy sales analytics chatbot** using Agentic RAG architecture and multi-agent collaboration. The system integrates dual data analysis pipelines (text sentiment analysis & sales sequence prediction) with natural language interaction capabilities. Core components include:
 
@@ -15,7 +13,6 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
    - Natural language query interface
    - Visual analytics dashboard
 
----
 
 ## 🛠 Technical Architecture  
 ### 1. Data Processing Pipeline
@@ -51,7 +48,6 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ### Configuration
 
----
 
 ## 🗺 Implementation Roadmap
 做完了这里可以画个甘特图
@@ -71,3 +67,17 @@ gantt
     Dialog Logic Development  :
     Report Template Design     :
 ```
+
+## 📚 References
+
+- Basic Knowledge:
+  - RAG Intro: https://www.zhihu.com/question/638503601/answer/3384081209
+  - RAG Framework: https://zhuanlan.zhihu.com/p/19229901774
+- UI: 
+  - Chatbot: https://github.com/rag-web-ui/rag-web-ui
+  - Chatbot: https://github.com/karthik-codex/Autogen_GraphRAG_Ollama
+  - Dashboard: https://github.com/ColorlibHQ/gentelella
+- Multi Agent: 
+  - Overview: https://github.com/DSXiangLi/DecryptPrompt
+  - InsightLens: https://arxiv.org/abs/2404.01644
+  - Agentic RAG Framework: https://github.com/asinghcsu/AgenticRAG-Survey
