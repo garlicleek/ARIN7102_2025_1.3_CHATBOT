@@ -55,7 +55,7 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ## 🗺 Implementation Roadmap
 做完了这里可以画个甘特图
-```mermaid
+```
 gantt
     title Project Milestones
     dateFormat  YYYY-MM-DD
