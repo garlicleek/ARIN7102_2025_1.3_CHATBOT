@@ -33,7 +33,6 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ### 3. Frontend Implementation
 
----
 
 ## ⚙️ Installation & Deployment
 ### Prerequisites
