@@ -8,6 +8,7 @@ from agents.command_agent import command_agent
 from agents.interrupt_agent import interrupt_agent
 from agents.langgraph_supervisor_agent import langgraph_supervisor_agent
 from agents.research_assistant import research_assistant
+from agents.rag_agent import rag_agent
 from schema import AgentInfo
 
 DEFAULT_AGENT = "research-assistant"
@@ -30,6 +31,7 @@ agents: dict[str, Agent] = {
         description="A langgraph supervisor agent", graph=langgraph_supervisor_agent
     ),
     "interrupt-agent": Agent(description="An agent the uses interrupts.", graph=interrupt_agent),
+    "rag-agent": Agent(description="A RAG agent.", graph=rag_agent),
 }
 
 
