@@ -30,7 +30,7 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ### 2. Multi-Agent System
 **Agentic RAG Architecture**:  
-![rag_architecture.png](media\rag_architecture.png)
+![rag_architecture.png](media/rag_architecture.png)
 
 ### 3. Frontend Implementation
 
