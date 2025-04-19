@@ -100,7 +100,9 @@ gantt
 ## 📚 References
 ### 1. In Using
 - framework:https://github.com/JoshuaC215/agent-service-toolkit
+preparing to use:
 - RAG agent:https://github.com/NVIDIA/workbench-example-agentic-rag
+- RAG agent2:https://github.com/SciPhi-AI/R2R/blob/main/py/core/agent/rag.py
 
 ### 2. Only for reference
 - Basic Knowledge:
