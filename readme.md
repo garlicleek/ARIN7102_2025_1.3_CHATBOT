@@ -68,7 +68,11 @@ gantt
 ```
 
 ## 📚 References
+### 1. In Using
+- framework:https://github.com/JoshuaC215/agent-service-toolkit
+- RAG agent:https://github.com/NVIDIA/workbench-example-agentic-rag
 
+### 2. Only for reference
 - Basic Knowledge:
   - RAG Intro: https://www.zhihu.com/question/638503601/answer/3384081209
   - RAG Framework: https://zhuanlan.zhihu.com/p/19229901774
