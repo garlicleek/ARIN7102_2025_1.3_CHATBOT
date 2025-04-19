@@ -3,9 +3,10 @@
 ## 📑 Project Overview  
 This project implements an **intelligent pharmacy sales analytics chatbot** using Agentic RAG architecture and multi-agent collaboration. The system integrates dual data analysis pipelines (text sentiment analysis & sales sequence prediction) with natural language interaction capabilities. Core components include:
 
-1. **Dual-Modal Data Analysis**:
+1. **Triple-Modal Data Analysis**:
    - Text sentiment analysis on pharmaceutical reviews
    - Time-series forecasting for drug sales using LSTM
+   - DEC Cluster analysis for topic classfication on reviews
 2. **Agentic RAG Framework**:
    - Multi-agent collaboration for pharmaceutical data Q&A
    - Context-aware retrieval and dynamic response generation
