@@ -63,7 +63,20 @@ streamlit run src/streamlit_app.py
 ```
 
 ### Configuration
+If you need to run at local environment, please change `.env`
+```.env
+HOST=localhost
+```
 
+Please first add any API key before running
+```.env
+OPENAI_API_KEY=
+AZURE_OPENAI_API_KEY=
+DEEPSEEK_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_API_KEY=
+GROQ_API_KEY=
+```
 
 ## 🗺 Implementation Roadmap
 做完了这里可以画个甘特图
