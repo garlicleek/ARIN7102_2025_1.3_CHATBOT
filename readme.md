@@ -33,21 +33,50 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ### 3. Frontend Implementation
 
----
 
 ## ⚙️ Installation & Deployment
 ### Prerequisites
+1. Create your environment configuration
+```sh
+cp .env.example .env
+```
 
-### Setup Instructions
-1. **Backend Setup**:
+2. Create a virtual environment and install dependencies in your python:
+```commandline
+pip install uv
+uv sync --frozen
+```
 
-2. **Database Initialization**:
+3. run server and streamlit
+enter the virtual environment
+```commandline
+cd .venv/Scripts && activate.bat
+```
+run service:
+```commandline
+python src/run_service.py
+```
 
-3. **Frontend Setup**:
-
+run streamlit:
+```commandline
+streamlit run src/streamlit_app.py
+```
 
 ### Configuration
+If you need to run at local environment, please change `.env`
+```.env
+HOST=localhost
+```
 
+Please first add any API key before running
+```.env
+OPENAI_API_KEY=
+AZURE_OPENAI_API_KEY=
+DEEPSEEK_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_API_KEY=
+GROQ_API_KEY=
+```
 
 ## 🗺 Implementation Roadmap
 做完了这里可以画个甘特图
@@ -69,7 +98,11 @@ gantt
 ```
 
 ## 📚 References
+### 1. In Using
+- framework:https://github.com/JoshuaC215/agent-service-toolkit
+- RAG agent:https://github.com/NVIDIA/workbench-example-agentic-rag
 
+### 2. Only for reference
 - Basic Knowledge:
   - RAG Intro: https://www.zhihu.com/question/638503601/answer/3384081209
   - RAG Framework: https://zhuanlan.zhihu.com/p/19229901774
