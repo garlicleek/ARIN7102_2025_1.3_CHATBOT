@@ -139,7 +139,7 @@ def extract_topic_keywords(texts, labels, centers, embedding_model, n_words=15):
 
 # 主流程（保持不变）
 def main():
-    tsv_path = "drugsComSentiment.tsv"
+    tsv_path = "../drugsComSentiment.tsv"
     text_column = "review"
     n_clusters = 5
 
