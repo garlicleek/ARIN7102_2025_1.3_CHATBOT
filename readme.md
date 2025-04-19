@@ -36,14 +36,31 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 
 ## ⚙️ Installation & Deployment
 ### Prerequisites
+1. Create your environment configuration
+```sh
+cp .env.example .env
+```
 
-### Setup Instructions
-1. **Backend Setup**:
+2. Create a virtual environment and install dependencies in your python:
+```commandline
+pip install uv
+uv sync --frozen
+```
 
-2. **Database Initialization**:
+3. run server and streamlit
+enter the virtual environment
+```commandline
+cd .venv/Scripts && activate.bat
+```
+run service:
+```commandline
+python src/run_service.py
+```
 
-3. **Frontend Setup**:
-
+run streamlit:
+```commandline
+streamlit run src/streamlit_app.py
+```
 
 ### Configuration
 
