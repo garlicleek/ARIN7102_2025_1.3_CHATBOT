@@ -3,7 +3,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 
-from agents.rag_agent.auth_agent import auth_agent
+
 
 
 class RAGAgentState(MessagesState, total=False):
@@ -13,7 +13,7 @@ class RAGAgentState(MessagesState, total=False):
 
 async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
     """处理用户请求"""
-    return await auth_agent.ainvoke(state, config)
+    pass
 
 
 # 构建主智能体图
