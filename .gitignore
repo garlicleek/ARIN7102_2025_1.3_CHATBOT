@@ -6,7 +6,8 @@ checkpoints.db-*
 # VSCode
 .vscode
 .DS_Store
-
+.csv
+s
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
