@@ -1,0 +1,14 @@
+{
+    "sql": {
+        "host": "localhost",
+        "port": 3306,
+        "user": "root",
+        "password": "",
+        "database": "rag"
+    },
+    "neo4j": {
+        "uri": "bolt://localhost:7687",
+        "user": "neo4j",
+        "password": "tom20011018"
+    }
+} 
