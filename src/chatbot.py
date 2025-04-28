@@ -14,8 +14,9 @@ from schema.task_data import TaskData, TaskDataStatus
 from components.navigation import create_navigation
 from components.styles import apply_global_styles
 
-APP_TITLE = "智能助手"
+APP_TITLE = "Smart Agent"
 APP_ICON = "🤖"
+
 
 async def main() -> None:
     # 设置页面配置必须是第一个 Streamlit 命令
@@ -27,10 +28,10 @@ async def main() -> None:
 
     # 应用全局样式
     apply_global_styles()
-    
+
     # 创建导航
-    create_navigation()
-    
+    # create_navigation()
+
     if st.get_option("client.toolbarMode") != "minimal":
         st.set_option("client.toolbarMode", "minimal")
         await asyncio.sleep(0.1)
@@ -44,14 +45,15 @@ async def main() -> None:
             port = os.getenv("PORT", 8080)
             agent_url = f"http://{host}:{port}"
         try:
-            with st.spinner("正在连接智能助手服务..."):
+            with st.spinner("Connecting to Smart Agent service..."):
                 st.session_state.agent_client = AgentClient(base_url=agent_url)
         except AgentClientError as e:
-            st.error(f"连接智能助手服务失败 {agent_url}: {e}")
-            st.markdown("服务可能正在启动中，请稍后重试。")
+            st.error(f"Failed to connect to Smart Agent service {agent_url}: {e}")
+            st.markdown("The service may be starting up, please try again later.")
             st.stop()
     agent_client: AgentClient = st.session_state.agent_client
 
+    # 对话管理核心
     if "thread_id" not in st.session_state:
         thread_id = st.query_params.get("thread_id")
         if not thread_id:
@@ -61,47 +63,47 @@ async def main() -> None:
             try:
                 messages: ChatHistory = agent_client.get_history(thread_id=thread_id).messages
             except AgentClientError:
-                st.error("未找到此对话ID的历史记录。")
+                st.error("No chat history found for this thread ID.")
                 messages = []
         st.session_state.messages = messages
         st.session_state.thread_id = thread_id
 
-    # 配置选项
+    # 侧边栏设置
     with st.sidebar:
         st.header(f"{APP_ICON} {APP_TITLE}")
         ""
-        "基于 LangGraph、FastAPI 和 Streamlit 构建的 AI 智能助手系统"
-        with st.popover(":material/settings: 设置", use_container_width=True):
+        "AI Smart Assistant System built on LangGraph, FastAPI, and Streamlit"
+        with st.popover(":material/settings: Settings", use_container_width=True):
             model_idx = agent_client.info.models.index(agent_client.info.default_model)
-            model = st.selectbox("选择模型", options=agent_client.info.models, index=model_idx)
+            model = st.selectbox("Choose model", options=agent_client.info.models, index=model_idx)
             agent_list = [a.key for a in agent_client.info.agents]
             agent_idx = agent_list.index(agent_client.info.default_agent)
             agent_client.agent = st.selectbox(
-                "选择助手",
+                "Choose Agent",
                 options=agent_list,
                 index=agent_idx,
             )
-            use_streaming = st.toggle("流式输出", value=True)
+            use_streaming = st.toggle("Streaming Output", value=True)
 
-        @st.dialog("架构")
-        def architecture_dialog() -> None:
-            st.image(
-                "https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true"
-            )
-            "[在 Github 上查看完整大小](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png)"
-            st.caption(
-                "应用托管在 [Streamlit Cloud](https://share.streamlit.io/) 上，FastAPI 服务运行在 [Azure](https://learn.microsoft.com/en-us/azure/app-service/) 上"
-            )
+        # @st.dialog("架构")
+        # def architecture_dialog() -> None:
+        #     st.image(
+        #         "https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true"
+        #     )
+        #     "[在 Github 上查看完整大小](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png)"
+        #     st.caption(
+        #         "应用托管在 [Streamlit Cloud](https://share.streamlit.io/) 上，FastAPI 服务运行在 [Azure](https://learn.microsoft.com/en-us/azure/app-service/) 上"
+        #     )
+        #
+        # if st.button(":material/schema: 架构", use_container_width=True):
+        #     architecture_dialog()
 
-        if st.button(":material/schema: 架构", use_container_width=True):
-            architecture_dialog()
+        # with st.popover(":material/policy: 隐私", use_container_width=True):
+        #     st.write(
+        #         "此应用中的提示、响应和反馈会被匿名记录并保存到 LangSmith，仅用于产品评估和改进。"
+        #     )
 
-        with st.popover(":material/policy: 隐私", use_container_width=True):
-            st.write(
-                "此应用中的提示、响应和反馈会被匿名记录并保存到 LangSmith，仅用于产品评估和改进。"
-            )
-
-        @st.dialog("分享/恢复对话")
+        @st.dialog("Share/resume chat")
         def share_chat_dialog() -> None:
             session = st.runtime.get_instance()._session_mgr.list_active_sessions()[0]
             st_base_url = urllib.parse.urlunparse(
@@ -110,16 +112,16 @@ async def main() -> None:
             if not st_base_url.startswith("https") and "localhost" not in st_base_url:
                 st_base_url = st_base_url.replace("http", "https")
             chat_url = f"{st_base_url}?thread_id={st.session_state.thread_id}"
-            st.markdown(f"**对话链接:**\n```text\n{chat_url}\n```")
-            st.info("复制上面的链接以分享或恢复此对话")
+            st.markdown(f"**Chat url:**\n```text\n{chat_url}\n```")
+            st.info("Copy the link above to share or resume this chat")
 
-        if st.button(":material/upload: 分享/恢复对话", use_container_width=True):
+        if st.button(":material/upload: Share/resume chat", use_container_width=True):
             share_chat_dialog()
 
-        "[查看源代码](https://github.com/JoshuaC215/agent-service-toolkit)"
-        st.caption(
-            "由 [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) 在 Oakland 制作"
-        )
+        # "[查看源代码](https://github.com/JoshuaC215/agent-service-toolkit)"
+        # st.caption(
+        #     "由 [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) 在 Oakland 制作"
+        # )
 
     # 绘制现有消息
     messages: list[ChatMessage] = st.session_state.messages
@@ -127,13 +129,13 @@ async def main() -> None:
     if len(messages) == 0:
         match agent_client.agent:
             case "chatbot":
-                WELCOME = "你好！我是一个简单的聊天机器人。有什么我可以帮你的吗？"
+                WELCOME = "Hello! I'm a simple chatbot. How can I assist you today?"
             case "interrupt-agent":
-                WELCOME = "你好！我是一个中断代理。告诉我你的生日，我可以预测你的性格！"
+                WELCOME = "Hello! I'm an interrupt agent. Tell me your birthday, and I can predict your personality!"
             case "research-assistant":
-                WELCOME = "你好！我是一个具有网络搜索和计算器功能的 AI 研究助手。有什么我可以帮你的吗？"
+                WELCOME = "Hello! I'm an AI research assistant with web search and calculator capabilities. How can I assist you today?"
             case _:
-                WELCOME = "你好！我是一个 AI 助手。有什么我可以帮你的吗？"
+                WELCOME = "Hello! I'm an AI assistant. How can I assist you today?"
         with st.chat_message("ai"):
             st.write(WELCOME)
 
@@ -166,7 +168,7 @@ async def main() -> None:
                 st.chat_message("ai").write(response.content)
             st.rerun()  # 清除过时的容器
         except AgentClientError as e:
-            st.error(f"生成响应时出错: {e}")
+            st.error(f"Error generating response: {e}")
             st.stop()
 
     # 如果生成了消息，显示反馈小部件
@@ -174,9 +176,10 @@ async def main() -> None:
         with st.session_state.last_message:
             await handle_feedback()
 
+
 async def draw_messages(
-    messages_agen: AsyncGenerator[ChatMessage | str, None],
-    is_new: bool = False,
+        messages_agen: AsyncGenerator[ChatMessage | str, None],
+        is_new: bool = False,
 ) -> None:
     """绘制一组聊天消息 - 重放现有消息或流式传输新消息。"""
     last_message_type = None
@@ -198,7 +201,7 @@ async def draw_messages(
             streaming_placeholder.write(streaming_content)
             continue
         if not isinstance(msg, ChatMessage):
-            st.error(f"意外的消息类型: {type(msg)}")
+            st.error(f"Unexpected message type: {type(msg)}")
             st.write(msg)
             st.stop()
 
@@ -228,18 +231,18 @@ async def draw_messages(
                         call_results = {}
                         for tool_call in msg.tool_calls:
                             status = st.status(
-                                f"""工具调用: {tool_call["name"]}""",
+                                f"""Tool call: {tool_call["name"]}""",
                                 state="running" if is_new else "complete",
                             )
                             call_results[tool_call["id"]] = status
-                            status.write("输入:")
+                            status.write("Args:")
                             status.write(tool_call["args"])
 
                         for _ in range(len(call_results)):
                             tool_result: ChatMessage = await anext(messages_agen)
 
                             if tool_result.type != "tool":
-                                st.error(f"意外的 ChatMessage 类型: {tool_result.type}")
+                                st.error(f"Unexpected ChatMessage type: {tool_result.type}")
                                 st.write(tool_result)
                                 st.stop()
 
@@ -247,7 +250,7 @@ async def draw_messages(
                                 st.session_state.messages.append(tool_result)
                             if tool_result.tool_call_id:
                                 status = call_results[tool_result.tool_call_id]
-                            status.write("输出:")
+                            status.write("Result:")
                             status.write(tool_result.content)
                             status.update(state="complete")
 
@@ -255,7 +258,7 @@ async def draw_messages(
                 try:
                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
                 except ValidationError:
-                    st.error("从助手接收到意外的 CustomData 消息")
+                    st.error("Received unexpected CustomData message from assistant")
                     st.write(msg.custom_data)
                     st.stop()
 
@@ -273,9 +276,10 @@ async def draw_messages(
                 status.add_and_draw_task_data(task_data)
 
             case _:
-                st.error(f"意外的 ChatMessage 类型: {msg.type}")
+                st.error(f"Unexpected ChatMessage type: {msg.type}")
                 st.write(msg)
                 st.stop()
+
 
 async def handle_feedback() -> None:
     """绘制反馈小部件并记录用户的反馈。"""
@@ -294,13 +298,14 @@ async def handle_feedback() -> None:
                 run_id=latest_run_id,
                 key="human-feedback-stars",
                 score=normalized_score,
-                kwargs={"comment": "行内用户反馈"},
+                kwargs={"comment": "Inline user feedback"},
             )
         except AgentClientError as e:
-            st.error(f"记录反馈时出错: {e}")
+            st.error(f"Error recording feedback: {e}")
             st.stop()
         st.session_state.last_feedback = (latest_run_id, feedback)
-        st.toast("反馈已记录", icon=":material/reviews:")
+        st.toast("Feedback recorded", icon=":material/reviews:")
+
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
