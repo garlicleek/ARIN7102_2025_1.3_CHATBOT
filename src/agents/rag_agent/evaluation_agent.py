@@ -1,11 +1,12 @@
 from typing import Literal
-
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
-
-from agents.llama_guard import LlamaGuard, LlamaGuardOutput
+import os
+import aiohttp
+from langchain_core.messages import AIMessage, HumanMessage
+from agents.llama_guard import LlamaGuard, SafetyAssessment
 
 
 class EvaluationState(MessagesState, total=False):
@@ -15,26 +16,100 @@ class EvaluationState(MessagesState, total=False):
 
 
 async def evaluate_safety(state: EvaluationState, config: RunnableConfig) -> EvaluationState:
-    """评估内容安全性"""
-    # 框架阶段，只返回模拟数据
-    return {"safety_score": 0.9}
+    """使用LlamaGuard评估内容安全性，只返回安全评分"""
+    # 初始化LlamaGuard
+    guard = LlamaGuard()
+
+    # 获取对话历史中的最后一条AI消息
+    messages = state.get("messages", [])
+    last_ai_message = next(
+        (msg for msg in reversed(messages) if isinstance(msg, AIMessage)),
+        None
+    )
+
+    if not last_ai_message:
+        return {"safety_score": 1.0}  # 没有AI消息视为安全
+
+    # 构建包含上下文的对话历史（最后3条消息）
+    context_messages = messages[-3:] if len(messages) >= 3 else messages
+
+    # 调用LlamaGuard进行评估
+    assessment = await guard.ainvoke(
+        role="Agent",  # 评估AI回复
+        messages=context_messages
+    )
+
+    # 计算安全评分 (1.0=安全, 0.0=不安全)
+    safety_score = 1.0 if assessment.safety_assessment == SafetyAssessment.SAFE else 0.0
+
+    return {"safety_score": safety_score}
 
 
 async def evaluate_quality(state: EvaluationState, config: RunnableConfig) -> EvaluationState:
-    """评估内容质量"""
-    # 框架阶段，只返回模拟数据
-    return {"quality_score": 0.8}
+    """使用DeepSeek API评估内容质量"""
+    # 获取对话历史
+    messages = state.get("messages", [])
+
+    # 提取最近3条消息作为上下文（可根据API要求调整）
+    context_messages = messages[-3:] if len(messages) >= 3 else messages
+
+    # 准备API请求
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    url = "https://api.deepseek.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    # 构建评估指令
+    system_prompt = """你是一个质量评估专家。请根据以下维度评估AI回复的质量：
+1. 信息准确性
+2. 逻辑连贯性
+3. 用户需求匹配度
+4. 语言规范性
+
+请给出0到1之间的综合评分（0=完全不合格，1=完美），只需返回数值。"""
+
+    # 构造对话历史
+    formatted_messages = [{"role": "system", "content": system_prompt}]
+    for msg in context_messages:
+        role = "assistant" if isinstance(msg, AIMessage) else "user"
+        formatted_messages.append({"role": role, "content": msg.content})
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": formatted_messages,
+        "temperature": 0.1,
+        "max_tokens": 4
+    }
+
+    # 调用API
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload, headers=headers) as response:
+            if response.status == 200:
+                result = await response.json()
+                response_text = result['choices'][0]['message']['content'].strip()
+
+                # 解析评分
+                try:
+                    quality_score = min(max(float(response_text), 0.0), 1.0)
+                except ValueError:
+                    quality_score = 0.7  # 默认值
+            else:
+                quality_score = 0.7  # 失败时默认值
+
+    return {"quality_score": quality_score}
 
 
 async def format_evaluation(state: EvaluationState, config: RunnableConfig) -> EvaluationState:
-    """格式化评估结果"""
+    """格式化评估结果，只显示分数"""
     safety = state.get("safety_score", 0)
     quality = state.get("quality_score", 0)
-    
+
     content = f"评估结果：\n"
     content += f"安全性评分：{safety:.2f}\n"
     content += f"质量评分：{quality:.2f}\n"
-    
+
     return {"messages": [AIMessage(content=content)]}
 
 
@@ -55,4 +130,4 @@ evaluation_agent.add_edge("evaluate_quality", "format_evaluation")
 evaluation_agent.add_edge("format_evaluation", END)
 
 # 编译图并添加MemorySaver
-evaluation_agent = evaluation_agent.compile(checkpointer=MemorySaver()) 
+evaluation_agent = evaluation_agent.compile(checkpointer=MemorySaver())
