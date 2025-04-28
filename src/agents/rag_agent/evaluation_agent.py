@@ -62,13 +62,30 @@ async def evaluate_quality(state: EvaluationState, config: RunnableConfig) -> Ev
     }
 
     # 构建评估指令
-    system_prompt = """你是一个质量评估专家。请根据以下维度评估AI回复的质量：
-1. 信息准确性
-2. 逻辑连贯性
-3. 用户需求匹配度
-4. 语言规范性
+    system_prompt = """
+You are a quality assessment expert. Please evaluate the AI response based on the following criteria and provide a weighted score:
+1. Information Accuracy (Weight: 20%)
+   - Score: 0-1
+   - Criteria: Factual correctness, data reliability, source credibility
+2. Logical Coherence (Weight: 10%)
+   - Score: 0-1
+   - Criteria: Flow of ideas, argument structure, reasoning clarity
+3. User Need Match (Weight: 60%)
+   - Score: 0-1
+   - Criteria: Relevance to user's question, completeness of answer, practical value
+4. Language Standardization (Weight: 10%)
+   - Score: 0-1
+   - Criteria: Grammar, clarity, professional tone
+Calculation Method:
+1. First, score each criterion separately (0-1)
+2. Then apply weights:
+   - Information Accuracy * 0.2
+   - Logical Coherence * 0.1
+   - User Need Match * 0.6
+   - Language Standardization * 0.1
+3. Sum the weighted scores to get the final score (0-1)
 
-请给出0到1之间的综合评分（0=完全不合格，1=完美），只需返回数值。"""
+Return only the final weighted score as a number between 0 and 1."""
 
     # 构造对话历史
     formatted_messages = [{"role": "system", "content": system_prompt}]
@@ -106,9 +123,9 @@ async def format_evaluation(state: EvaluationState, config: RunnableConfig) -> E
     safety = state.get("safety_score", 0)
     quality = state.get("quality_score", 0)
 
-    content = f"评估结果：\n"
-    content += f"安全性评分：{safety:.2f}\n"
-    content += f"质量评分：{quality:.2f}\n"
+    content = f"Evaluation Result:\n"
+    content += f"Safety Score: {safety:.2f}\n"
+    content += f"Quality Score: {quality:.2f}\n"
 
     return {"messages": [AIMessage(content=content)]}
 

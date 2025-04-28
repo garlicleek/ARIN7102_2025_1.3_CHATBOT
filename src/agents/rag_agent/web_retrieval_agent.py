@@ -23,7 +23,6 @@ class WebRetrievalState(MessagesState, total=False):
 
 async def search_web(state: WebRetrievalState, config: RunnableConfig) -> WebRetrievalState:
 	"""执行网络搜索"""
-	# 框架阶段，只返回模拟数据
 	query = state["messages"][-1].content
 	print(f"question is {query}")
 	# initialization of tools of search (environmental variable 'TAVILY_API_KEY' should be set)
