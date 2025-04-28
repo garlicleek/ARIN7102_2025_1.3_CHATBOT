@@ -26,7 +26,10 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
 	# 并行执行两种检索
 	internal_result = await internal_retrieval_agent.ainvoke(state, config)
 	web_result = await web_retrieval_agent.ainvoke(state, config)
-	
+
+	# internal_result = {"messages": [AIMessage("测试接口:internal_result")]}
+	# web_result = {"messages": [AIMessage("测试接口:web_result")]}
+
 	# 组合结果
 	result = {
 		"messages": [
@@ -35,7 +38,7 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
 			*web_result["messages"]
 		]
 	}
-	
+
 	# 评估结果
 	evaluated_result = await evaluation_agent.ainvoke(result, config)
 	return evaluated_result
