@@ -1,60 +1,80 @@
-from typing import Literal
 
+from agents.rag_agent.internal_retrieval_agent import internal_retrieval_agent
+from agents.rag_agent.web_retrieval_agent import web_retrieval_agent
+from agents.rag_agent.evaluation_agent import evaluation_agent
+from typing import Optional
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 
-from agents.rag_agent.internal_retrieval_agent import internal_retrieval_agent
-from agents.rag_agent.web_retrieval_agent import web_retrieval_agent
-from agents.rag_agent.evaluation_agent import evaluation_agent
-
 
 class RAGAgentState(MessagesState, total=False):
-	"""RAG智能体状态"""
-	pass
+	"""增强的RAG智能体状态"""
+	valid_response: bool  # 验证状态
+	internal_safety: float  # 内部检索安全分
+	internal_quality: float  # 内部检索质量分
+	web_safety: float  # 网络检索安全分
+	web_quality: float  # 网络检索质量分
 
 
 async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
-	"""处理用户请求
-	作为RAG系统的统一接口，负责：
-	1. 并行调用内部和网络检索
-	2. 组合检索结果
-	3. 评估结果
-	4. 返回最终响应
-	"""
-	# 并行执行两种检索
-	internal_result = await internal_retrieval_agent.ainvoke(state, config)
-	web_result = await web_retrieval_agent.ainvoke(state, config)
+	"""改进的请求处理流程"""
+	# 清空前次无效响应
+	if not state.get("valid_response", True):
+		state["messages"] = []
 
-	# internal_result = {"messages": [AIMessage("测试接口:internal_result")]}
-	# web_result = {"messages": [AIMessage("测试接口:web_result")]}
+	# 并行获取原始响应
+	internal_response = await internal_retrieval_agent.ainvoke(state, config)
+	web_response = await web_retrieval_agent.ainvoke(state, config)
 
-	# 组合结果
-	result = {
+	# 分离评估各来源
+	internal_eval = await evaluation_agent.ainvoke(
+		{"messages": internal_response["messages"]},
+		config
+	)
+	web_eval = await evaluation_agent.ainvoke(
+		{"messages": web_response["messages"]},
+		config
+	)
+
+	# 计算综合评分
+	total_score = (
+			internal_eval.get("safety_score", 0)
+			+ internal_eval.get("quality_score", 0)
+			+ web_eval.get("safety_score", 0)
+			+ web_eval.get("quality_score", 0)
+	)
+
+	# 构建新状态
+	return {
+		"valid_response": total_score > 3,
+		"internal_safety": internal_eval.get("safety_score", 0),
+		"internal_quality": internal_eval.get("quality_score", 0),
+		"web_safety": web_eval.get("safety_score", 0),
+		"web_quality": web_eval.get("quality_score", 0),
 		"messages": [
-			AIMessage(content="测试RAG系统接口:"),
-			*internal_result["messages"],
-			*web_result["messages"]
+			*internal_response["messages"],
+			*web_response["messages"],
+			AIMessage(content=f"当前总分: {total_score:.2f}")
 		]
 	}
 
-	# 评估结果
-	evaluated_result = await evaluation_agent.ainvoke(result, config)
-	return evaluated_result
 
-
-# 构建主智能体图
+# 构建带循环的状态图
 rag_agent = StateGraph(RAGAgentState)
-
-# 添加节点
 rag_agent.add_node("process_request", process_request)
-
-# 设置入口点
 rag_agent.set_entry_point("process_request")
 
-# 添加边
-rag_agent.add_edge("process_request", END)
+# 添加条件循环逻辑
+rag_agent.add_conditional_edges(
+	"process_request",
+	lambda state: "process_request" if not state.get("valid_response") else END
+)
 
-# 编译图并添加MemorySaver
-rag_agent = rag_agent.compile(checkpointer=MemorySaver())
+# 最终编译
+rag_agent = rag_agent.compile(
+	checkpointer=MemorySaver(),
+	# 启用调试追踪
+	debug=True
+)
