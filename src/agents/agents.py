@@ -11,7 +11,7 @@ from agents.research_assistant import research_assistant
 from agents.rag_agent import rag_agent
 from schema import AgentInfo
 
-DEFAULT_AGENT = "research-assistant"
+DEFAULT_AGENT = "rag-agent"
 
 
 @dataclass
