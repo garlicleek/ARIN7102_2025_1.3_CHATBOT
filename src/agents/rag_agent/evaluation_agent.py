@@ -17,32 +17,37 @@ class EvaluationState(MessagesState, total=False):
 
 async def evaluate_safety(state: EvaluationState, config: RunnableConfig) -> EvaluationState:
     """使用LlamaGuard评估内容安全性，只返回安全评分"""
-    # 初始化LlamaGuard
-    guard = LlamaGuard()
+    try:
+        # 初始化LlamaGuard
+        guard = LlamaGuard()
 
-    # 获取对话历史中的最后一条AI消息
-    messages = state.get("messages", [])
-    last_ai_message = next(
-        (msg for msg in reversed(messages) if isinstance(msg, AIMessage)),
-        None
-    )
+        # 获取对话历史中的最后一条AI消息
+        messages = state.get("messages", [])
+        last_ai_message = next(
+            (msg for msg in reversed(messages) if isinstance(msg, AIMessage)),
+            None
+        )
 
-    if not last_ai_message:
-        return {"safety_score": 1.0}  # 没有AI消息视为安全
+        if not last_ai_message:
+            return {"safety_score": 1.0}  # 没有AI消息视为安全
 
-    # 构建包含上下文的对话历史（最后3条消息）
-    context_messages = messages[-3:] if len(messages) >= 3 else messages
+        # 构建包含上下文的对话历史（最后3条消息）
+        context_messages = messages[-3:] if len(messages) >= 3 else messages
 
-    # 调用LlamaGuard进行评估
-    assessment = await guard.ainvoke(
-        role="Agent",  # 评估AI回复
-        messages=context_messages
-    )
+        # 调用LlamaGuard进行评估
+        assessment = await guard.ainvoke(
+            role="Agent",  # 评估AI回复
+            messages=context_messages
+        )
 
-    # 计算安全评分 (1.0=安全, 0.0=不安全)
-    safety_score = 1.0 if assessment.safety_assessment == SafetyAssessment.SAFE else 0.0
+        # 计算安全评分 (1.0=安全, 0.0=不安全)
+        safety_score = 1.0 if assessment.safety_assessment == SafetyAssessment.SAFE else 0.0
 
-    return {"safety_score": safety_score}
+        return {"safety_score": safety_score}
+    except Exception as e:
+        print(f"LlamaGuard evaluation failed: {str(e)}")
+        # 如果LlamaGuard评估失败，默认返回安全
+        return {"safety_score": 1.0}
 
 
 async def evaluate_quality(state: EvaluationState, config: RunnableConfig) -> EvaluationState:

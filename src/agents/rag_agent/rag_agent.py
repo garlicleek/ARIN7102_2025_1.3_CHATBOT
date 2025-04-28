@@ -3,18 +3,17 @@ from agents.rag_agent.web_retrieval_agent import web_retrieval_agent
 from agents.rag_agent.evaluation_agent import evaluation_agent
 from core import get_model, settings
 
-from typing import Optional
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-import os
-import aiohttp
+import json
 
 
 class RAGAgentState(MessagesState, total=False):
 	"""RAG智能体状态"""
 	question: HumanMessage
+	enhanced_question: str
 	internal_text: str
 	web_text: str
 
@@ -34,16 +33,63 @@ def wrap_model(model, instructions) -> RunnableSerializable[RAGAgentState, AIMes
 	return preprocessor | model
 
 
+summary_prompt = f"""
+You are a professional content summarization expert. Please follow these steps to analyze and summarize the content:
+
+1. Content Analysis
+   - Carefully review the content from both internal knowledge base and web resources
+   - Identify key information and main points
+   - Evaluate information reliability and relevance
+
+2. Information Integration
+   - Compare information from different sources
+   - Identify connections and differences between information
+   - Eliminate duplicate content
+   - Handle potential conflicting information
+
+3. Structured Thinking
+   - Determine the main framework for the summary
+   - Prioritize information based on importance
+   - Ensure logical coherence
+
+4. Summary Generation
+   - Use clear and concise language
+   - Maintain an objective and neutral stance
+   - Highlight key information and core viewpoints
+   - Ensure completeness and accuracy of the summary
+
+Please output in the following format:
+[Analysis Process]
+1. Key Information Identification:
+   - Internal Knowledge Base: <list key points>
+   - Web Resources: <list key points>
+
+2. Information Integration Results:
+   - Common Points: <list common points>
+   - Differences: <list differences>
+
+[Final Summary]
+Provide a comprehensive summary that:
+- Uses clear and concise language
+- Emphasizes key points
+- Maintains logical flow
+- Stays objective and neutral
+- Covers all important aspects of the content
+
+[Quality Assessment]
+- Information Completeness: <score>
+- Logical Coherence: <score>
+- Language Standardization: <score>
+
+Please begin your analysis and summarization. 
+(important) please do not display your [Analysis Process] an [Quality Assessment], return final summary only"""
+
+
 async def summarize_responses(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
 	"""生成总结"""
-	prompt = f"""
-	请根据以下两个来源的内容生成简明的总结：
-	[内部知识库]
-	[网络资源]
-	用中文输出3-5句话的总结，保持客观中立。"""
 
 	model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-	model_runnable = wrap_model(model, prompt)
+	model_runnable = wrap_model(model, summary_prompt)
 	response = await model_runnable.ainvoke(
 		{"messages": [HumanMessage(content=state["internal_text"] + state["web_text"])]},
 		config
@@ -56,18 +102,98 @@ async def summarize_responses(state: RAGAgentState, config: RunnableConfig) -> R
 	}
 
 
+semantic_enhancement_prompt = """
+You are a pharmaceutical data specialist with expertise in healthcare and financial domains. Enhance user questions while strictly preserving technical terms and optimizing for medication-related data retrieval. Follow this protocol:
+
+1. **Domain Analysis**
+   - Identify key terms from:
+     - Medical: Generic/Brand names (e.g., <medical>Atorvastatin</medical>), ICD codes, ATC classifications
+     - Financial: DRG payment codes, NDC numbers, insurance policy IDs
+   - Flag ambiguous terms needing clarification (e.g., "cost" → clarify patient/insurance share)
+
+2. **Terminology Protection**
+   - Tag identified terms:
+     - Medical: <medical>{term}</medical>
+     - Financial: <finance>{term}</finance>
+   - Create RAG mapping:
+     Example: 
+     Metformin → <medical>Metformin HCl</medical> (CAS:1115-70-4)
+
+3. **Intent Inference**
+   - For non-medical questions containing:
+     - Drug names → Add therapeutic context 
+       (e.g., "side effects of <medical>Metformin</medical>" → add "in Type 2 Diabetes management")
+     - Financial terms → Link to medical entities
+       (e.g., "reimbursement rate" → associate with <medical>PCI stent</medical> procedures)
+   - For ambiguous queries → Activate hypothesis engine:
+     "You might be asking: {rephrased_medical_question}"
+
+4. **Enhancement Protocol**
+   a) Mandatory:
+   - Add drug specifications: Dosage form/strength/manufacturer
+   - Clarify data scope: Clinical trials/Post-marketing surveillance/Insurance claims
+
+   b) Conditional:
+   - If financial context: Add regional policy version 
+     (e.g., "[2024 National Reimbursement Drug List]")
+   - If adverse reactions: Link to WHO Vigibase reporting
+
+Please return the result in the following JSON format:
+{
+    "original_question": "Original question",
+    "enhanced_question": "The question after augment, include tag <medical> and <finance>",
+    "analysis": {
+        "medical_terms": ["<medical>term1</medical>", "<medical>term2</medical>"],
+        "financial_terms": ["<finance>term1</finance>", "<finance>term2</finance>"],
+        "intent": "user's intent",
+        "context_added": ["context1", "context2"],
+        "enhancement_rationale": "reason for enhancement"
+    }
+}
+"""
+
+
 async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
+	print("Enhancing question semantics...")
+	# 获取原始问题
+	original_question = state["messages"][-1].content
+
+	# 使用LLM进行语义增强
+	model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL)).with_config(tags=["skip_stream"])
+	model_runnable = wrap_model(model, semantic_enhancement_prompt)
+	enhanced_response = await model_runnable.ainvoke(
+		{"messages": [HumanMessage(content=original_question)]},
+		config
+	)
+
+	# 解析JSON响应
+	try:
+		enhanced_data = json.loads(enhanced_response.content)
+		enhanced_question = enhanced_data["enhanced_question"]
+		analysis = enhanced_data["analysis"]
+	except json.JSONDecodeError:
+		# 如果JSON解析失败，使用原始增强问题
+		enhanced_question = enhanced_response.content
+
 	print("Retrieval information...")
-	internal_response = await internal_retrieval_agent.ainvoke(state, config)
+	# 使用增强后的问题进行检索
+	internal_response = await internal_retrieval_agent.ainvoke(
+		{"messages": [HumanMessage(content=enhanced_question)]},
+		config
+	)
 	internal_text = "\n".join([m.content for m in internal_response["messages"] if isinstance(m, AIMessage)])
 
-	web_response = await web_retrieval_agent.ainvoke(state, config)
+	web_response = await web_retrieval_agent.ainvoke(
+		{"messages": [HumanMessage(content=enhanced_question)]},
+		config
+	)
 	web_text = "\n".join([m.content for m in web_response["messages"] if isinstance(m, AIMessage)])
 	print("Retrieval information finished")
 
 	# 更新状态并返回
 	return {
 		"question": state["messages"][-1],
+		"enhanced_question": enhanced_question,
 		"internal_text": internal_text,
 		"web_text": web_text,
 	}
@@ -119,12 +245,13 @@ rag_agent.set_entry_point("process_request")
 rag_agent.add_edge("process_request", "evaluate")
 rag_agent.add_edge("evaluate", "summarize")
 rag_agent.add_conditional_edges(
-	"summarize",
+	"evaluate",
 	lambda state: "evaluate" if (
 			not state.get("valid_response")
 			and state.get("retry_count", 0) < 2
-	) else END
+	) else "summarize"
 )
+rag_agent.add_edge("summarize", END)
 
 rag_agent = rag_agent.compile(
 	checkpointer=MemorySaver(),
