@@ -155,15 +155,10 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 	question = state["messages"][-1].content
 	print(f"question is {question}")
 	model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-	model_runnable = wrap_model(model, sales_instructions)
+	model_runnable = wrap_model(model, sales_instructions).with_config(tags=["skip_stream"])
 	response = await model_runnable.ainvoke({"messages": [HumanMessage(content=question)]}, config)
 
 	try:
-		print("=== Response Content ===")
-		print("Type:", type(response.content))
-		print("Content:", response.content)
-		print("=================")
-		
 		# 使用正则匹配大括号内的JSON内容
 		json_pattern = r'\{[^{}]*\}'
 		match = re.search(json_pattern, response.content)
@@ -172,29 +167,34 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 		
 		# 使用json.loads解析匹配到的JSON内容
 		result = json.loads(match.group(0))
-		print("sales JSON result is:", result)
-
+		print(result)
 		# 如果置信度大于0.7且是销售相关的问题，添加药品销售数据到retrieved_docs
 		if result["is_sales_related"] and result["confidence"] > 0.7:
 			# 获取所有置信度大于0.7的药品的销售数据
 			high_confidence_drugs = result["drug_names"]
 			sales_data = {}
 			
+			# 获取时间列
+			time_data = sales_df['ds'].tolist()
+			
 			for drug in high_confidence_drugs:
 				if drug in sales_df.columns:
-					sales_data[drug] = sales_df[drug].tolist()
+					# 将时间列和销售数据组合成字典列表
+					sales_data[drug] = [
+						{"date": date, "sales": sales}
+						for date, sales in zip(time_data, sales_df[drug].tolist())
+					]
 			
 			# 创建包含JSON结果和销售数据的Document对象
 			doc_content = {
 				"intent_analysis": result,
 				"sales_data": sales_data
 			}
-			
+			print("The sales data of the drugs is as follows:" + str(doc_content))
 			return {
-				"retrieved_docs": [Document(page_content=str(doc_content))]
+				"retrieved_docs": [Document(page_content="The sales data of the drugs is as follows:" + str(doc_content))]
 			}
 		else:
-			print(f"Question is not related to sales.")
 			return {
 				"retrieved_docs": []
 			}
@@ -211,8 +211,6 @@ async def retrieve_docs(state: InternalRetrievalState, config: RunnableConfig) -
 	"""Retrieve internal documents"""
 	# Get the latest user message
 	question = state["messages"][-1].content
-	print(f"question is {question}")
-
 	results = search(question, top_k=3)
 	print("Top 3 results:")
 	for i, res in enumerate(results):

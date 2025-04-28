@@ -72,15 +72,27 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
             "messages": [AIMessage(content="已达到最大重试次数，返回最终结果")]
         }
 
-    # 清空前次无效响应
+    # 清空前次无效响应，但保留初始question
     if not state.get("valid_response", True):
-        state["messages"] = []
+        # 找到最后一条HumanMessage作为初始question
+        initial_question = None
+        for msg in reversed(state["messages"]):
+            if msg.type == "human":
+                initial_question = msg
+                break
+        
+        # 只保留初始question
+        state["messages"] = [initial_question] if initial_question else []
 
     # 并行获取响应
+    print("Internal Retrieval information...")
     internal_response = await internal_retrieval_agent.ainvoke(state, config)
+    print("Web Retrieval information...")
     web_response = await web_retrieval_agent.ainvoke(state, config)
+    print("Retrieval finished")
 
     # 评估逻辑
+    print("Evaluate information...")
     internal_eval = await evaluation_agent.ainvoke(
         {"messages": internal_response["messages"]},
         config
@@ -89,6 +101,7 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
         {"messages": web_response["messages"]},
         config
     )
+    print("Evaluate information finished")
 
     # 完整评分计算
     total_score = (

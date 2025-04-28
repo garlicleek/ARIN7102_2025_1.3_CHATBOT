@@ -24,24 +24,52 @@ class WebRetrievalState(MessagesState, total=False):
 async def search_web(state: WebRetrievalState, config: RunnableConfig) -> WebRetrievalState:
 	"""执行网络搜索"""
 	# 框架阶段，只返回模拟数据
-	query = state["messages"][-1].content  # obtain the newest information of users for search
+	query = state["messages"][-1].content
+	print(f"question is {query}")
 	# initialization of tools of search (environmental variable 'TAVILY_API_KEY' should be set)
 	try:
 		search = TavilySearchResults()
 		results = await search.ainvoke({"query": query})
 		return {"search_results": str(results)}
 	except Exception as e:
-		return {"messages": [AIMessage(content=f"Search Failed: {str(e)}")]}
+		return {"search_results": [AIMessage(content=f"Search Failed: {str(e)}")]}
 
 
 async def format_web_results(state: WebRetrievalState, config: RunnableConfig) -> WebRetrievalState:
 	"""格式化网络搜索结果"""
 	results = state["search_results"]
 	if not results:
-		return {"messages": [AIMessage(content="未找到相关网络信息")]}
+		return {"messages": [AIMessage(content="Relevant information not found on website")]}
 
-	formatted_content = "网络搜索结果：\n\n"
-	formatted_content += results
+	# 检查是否是错误消息
+	if isinstance(results, str) and results.startswith("Search Failed:"):
+		return {"messages": [AIMessage(content=results)]}
+
+	formatted_content = "Found the following relevant websearch results:\n\n"
+	try:
+		# 尝试将字符串转换为列表
+		results_list = eval(results) if isinstance(results, str) else results
+		
+		# 确保results_list是列表
+		if not isinstance(results_list, list):
+			results_list = [results_list]
+			
+		# 格式化每个结果
+		for i, result in enumerate(results_list, 1):
+			if isinstance(result, dict):
+				# 处理字典格式的结果
+				title = result.get("title", "No Title")
+				content = result.get("content", "No Content")
+				url = result.get("url", "No URL")
+				formatted_content += f"{i}. {title}\n"
+				formatted_content += f"Content: {content}\n"
+				formatted_content += f"URL: {url}\n\n"
+			else:
+				# 处理其他格式的结果
+				formatted_content += f"{i}. {str(result)}\n\n"
+	except Exception as e:
+		# 如果解析失败，直接输出原始结果
+		formatted_content += str(results)
 
 	return {"messages": [AIMessage(content=formatted_content)]}
 
