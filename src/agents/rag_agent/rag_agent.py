@@ -150,6 +150,7 @@ Please return the result in the following JSON format:
         "enhancement_rationale": "reason for enhancement"
     }
 }
+IMPORTANT: You must return ONLY a JSON object, without any markdown formatting or additional text.
 """
 
 
@@ -168,13 +169,20 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
 
 	# 解析JSON响应
 	try:
-		enhanced_data = json.loads(enhanced_response.content)
+		text = enhanced_response.content
+		if text.startswith("```json"):
+			text = text[len("```json"):]
+
+		# 去掉末尾的 ```
+		if text.endswith("```"):
+			text = text[:-3]
+		enhanced_data = json.loads(text)
 		enhanced_question = enhanced_data["enhanced_question"]
 		analysis = enhanced_data["analysis"]
 	except json.JSONDecodeError:
 		# 如果JSON解析失败，使用原始增强问题
 		enhanced_question = enhanced_response.content
-
+	print(enhanced_question)
 	print("Retrieval information...")
 	# 使用增强后的问题进行检索
 	internal_response = await internal_retrieval_agent.ainvoke(
@@ -248,12 +256,9 @@ rag_agent.add_conditional_edges(
 	"evaluate",
 	lambda state: "evaluate" if (
 			not state.get("valid_response")
-			and state.get("retry_count", 0) < 2
+			and state.get("retry_count", 0) < 1
 	) else "summarize"
 )
 rag_agent.add_edge("summarize", END)
 
-rag_agent = rag_agent.compile(
-	checkpointer=MemorySaver(),
-	debug=False
-)
+rag_agent = rag_agent.compile()

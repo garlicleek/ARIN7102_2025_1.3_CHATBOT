@@ -69,7 +69,7 @@ async def format_web_results(state: WebRetrievalState, config: RunnableConfig) -
 	except Exception as e:
 		# 如果解析失败，直接输出原始结果
 		formatted_content += str(results)
-
+	print(formatted_content)
 	return {"messages": [AIMessage(content=formatted_content)]}
 
 
