@@ -50,6 +50,7 @@ dependencies = [
     "uvicorn ~=0.32.1",
     "sentence-transformers>=4.1.0",
     "faiss-cpu>=1.10.0",
+    "matplotlib>=3.10.1",
 ]
 
 [dependency-groups]

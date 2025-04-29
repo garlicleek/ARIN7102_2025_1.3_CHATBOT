@@ -59,9 +59,9 @@ run service:
 python src/run_service.py
 ```
 
-run streamlit:
+run chatbot:
 ```commandline
-streamlit run src/streamlit_app.py
+streamlit run src/chatbot.py
 ```
 
 ### Configuration
