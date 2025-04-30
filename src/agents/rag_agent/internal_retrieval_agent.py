@@ -1,7 +1,6 @@
 import traceback
-from typing import List, Dict
+from typing import List, Dict, Any
 import pandas as pd
-from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langgraph.checkpoint.memory import MemorySaver
@@ -43,8 +42,8 @@ drug_names = sales_df.columns.tolist()
 
 
 class InternalRetrievalState(MessagesState, total=False):
-	"""Internal retrieval agent state"""
-	retrieved_docs: List[Document] | None
+	"""内部检索智能体状态"""
+	retrieved_docs: List[Dict[str, Any]] | None
 
 
 def wrap_model(model, instructions) -> RunnableSerializable[InternalRetrievalState, AIMessage]:
@@ -73,8 +72,7 @@ def load_or_build():
 	with open(TEXT_FILE, 'r', encoding='utf-8') as f:
 		reader = csv.reader(f, delimiter='\t')
 		next(reader)  # 跳过标题行
-		texts = [f"drugName:{row[1].strip()}; useCondition:{row[2].strip()}; review:{row[3].strip()}" for row in
-		         reader]
+		texts = [f"drugName:{row[1].strip()}; useCondition:{row[2].strip()}; review:{row[3].strip()}" for row in reader]
 
 	print(f"Encoding {len(texts)} texts...")
 	model = SentenceTransformer(MODEL_NAME)
@@ -113,8 +111,14 @@ def search(question, top_k=5):
 	distances, indices = index.search(query_embedding.astype('float32'), top_k)
 	print(f"Search time: {time() - start:.4f}s")
 
-	# 提取结果
-	return [texts[i] for i in indices[0]]
+	# 提取结果和距离
+	results = []
+	for idx, dist in zip(indices[0], distances[0]):
+		results.append({
+			"text": texts[idx],
+			"distance": float(dist)
+		})
+	return results
 
 
 sales_instructions = f"""
@@ -136,7 +140,6 @@ The JSON object must have the following structure:
     "is_sales_related": boolean,  // Whether the question is related to drug sales
     "drug_names": [string],      // Array of extracted drug names, including both directly mentioned and relevant drugs
     "confidence": float,         // Confidence score between 0 and 1
-    "relevance_type": string     // Type of relevance: "direct_mention", "disease_related", "similar_effect", "alternative", "combination"
 }}
 
 Example response (return exactly this format, nothing else):
@@ -144,7 +147,6 @@ Example response (return exactly this format, nothing else):
     "is_sales_related": true,
     "drug_names": ["DrugA", "DrugB", "DrugC"],
     "confidence": 0.95,
-    "relevance_type": "disease_related"
 }}
 """
 
@@ -153,46 +155,43 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 	"""Use LLM to analyze user intent and extract drug names"""
 	# Get model and analyze intent
 	question = state["messages"][-1].content
-	print(f"question is {question}")
-	model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-	model_runnable = wrap_model(model, sales_instructions).with_config(tags=["skip_stream"])
+	llm_model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+	model_runnable = wrap_model(llm_model, sales_instructions).with_config(tags=["skip_stream"])
 	response = await model_runnable.ainvoke({"messages": [HumanMessage(content=question)]}, config)
 
 	try:
-		# 使用正则匹配大括号内的JSON内容
 		json_pattern = r'\{[^{}]*\}'
 		match = re.search(json_pattern, response.content)
 		if not match:
 			raise ValueError("No JSON object found in response")
 		
-		# 使用json.loads解析匹配到的JSON内容
 		result = json.loads(match.group(0))
 		print(result)
 		# 如果置信度大于0.7且是销售相关的问题，添加药品销售数据到retrieved_docs
 		if result["is_sales_related"] and result["confidence"] > 0.7:
 			# 获取所有置信度大于0.7的药品的销售数据
 			high_confidence_drugs = result["drug_names"]
-			sales_data = {}
+			results = []
 			
-			# 获取时间列
 			time_data = sales_df['ds'].tolist()
 			
-			for drug in high_confidence_drugs:
+			for i, drug in enumerate(high_confidence_drugs, 1):
 				if drug in sales_df.columns:
-					# 将时间列和销售数据组合成字典列表
-					sales_data[drug] = [
+					sales_data = [
 						{"date": date, "sales": sales}
 						for date, sales in zip(time_data, sales_df[drug].tolist())
 					]
-			
-			# 创建包含JSON结果和销售数据的Document对象
-			doc_content = {
-				"intent_analysis": result,
-				"sales_data": sales_data
-			}
-			print("The sales data of the drugs is as follows:" + str(doc_content))
+					
+					drug_result = {
+						"id": i,
+						"content": f"Sales data for {drug}: {json.dumps(sales_data, ensure_ascii=False)}",
+						"source": "SQL",
+						"confidence": result["confidence"]
+					}
+					results.append(drug_result)
+
 			return {
-				"retrieved_docs": [Document(page_content="The sales data of the drugs is as follows:" + str(doc_content))]
+				"retrieved_docs": results
 			}
 		else:
 			return {
@@ -207,34 +206,59 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 		}
 
 
+def normalize_confidence(question: str, distances: List[float]) -> List[float]:
+    """将匹配的知识根据内积计算置信度"""
+    if not distances:
+        return []
+        
+    # 设置最小置信度阈值
+    MIN_CONFIDENCE = 0.1
+    
+    # 使用问题与自身的相似度作为理论最大值
+    question_embedding = model.encode([question], convert_to_tensor=False)[0]
+    theoretical_max = np.dot(question_embedding, question_embedding)
+    
+    # 将内积值归一化到[0, 1]区间
+    normalized_distances = [d / theoretical_max for d in distances]
+    
+    # 如果所有值都相同，返回最小置信度
+    if len(set(normalized_distances)) == 1:
+        return [MIN_CONFIDENCE] * len(distances)
+    
+    # 使用softmax进行归一化，保留相对关系
+    exp_distances = np.exp(np.array(normalized_distances))
+    softmax_distances = exp_distances / exp_distances.sum()
+    
+    # 将softmax结果映射到[MIN_CONFIDENCE, 1.0]区间
+    confidence_scores = MIN_CONFIDENCE + (1.0 - MIN_CONFIDENCE) * softmax_distances
+    
+    return confidence_scores.tolist()
+
+
 async def retrieve_docs(state: InternalRetrievalState, config: RunnableConfig) -> InternalRetrievalState:
 	"""Retrieve internal documents"""
-	# Get the latest user message
 	question = state["messages"][-1].content
-	results = search(question, top_k=3)
-	print("Top 3 results:")
-	for i, res in enumerate(results):
-		print(f"{i + 1}. {res}")
+	
+	search_results = search(question, top_k=3)
+	
+	distances = [result["distance"] for result in search_results]
+	normalized_confidences = normalize_confidence(question, distances)
 
-	# Add vector search results to retrieved_docs
-	docs = state.get("retrieved_docs", [])
-	docs.extend([Document(page_content=f"{content}") for content in results])
+	existing_docs = state.get("retrieved_docs", [])
+	formatted_results = []
+	for i, (result, confidence) in enumerate(zip(search_results, normalized_confidences), 1):
+		formatted_result = {
+			"id": i,
+			"content": result["text"],
+			"source": "faiss",
+			"confidence": float(confidence)
+		}
+		formatted_results.append(formatted_result)
+	
+	# 将结果添加到retrieved_docs
+	docs = existing_docs + formatted_results
 	
 	return {"retrieved_docs": docs}
-
-
-async def format_results(state: InternalRetrievalState, config: RunnableConfig) -> InternalRetrievalState:
-	"""格式化检索结果"""
-	# docs 是上一步retrieve_docs函数中得到的"retrieved_docs"部分字段，也就是list[page_content, page_content...]
-	docs = state["retrieved_docs"]
-	if not docs:
-		return {"messages": [AIMessage(content="No relevant internal documents found")]}
-
-	formatted_content = "Found the following relevant internal documents:\n\n"
-	for i, doc in enumerate(docs, 1):
-		formatted_content += f"{i}. {doc.page_content}\n\n"
-
-	return {"messages": [AIMessage(content=formatted_content)]}
 
 
 # 构建内部检索智能体图
@@ -242,18 +266,14 @@ internal_retrieval_agent = StateGraph(InternalRetrievalState)
 
 # 添加节点
 internal_retrieval_agent.add_node("analyze_intent_and_extract_drugs", analyze_intent_and_extract_drugs)
-internal_retrieval_agent.add_node("retrieve_docs", retrieve_docs)  # 搜索文档
-internal_retrieval_agent.add_node("format_results", format_results)  # 格式化
+internal_retrieval_agent.add_node("retrieve_docs", retrieve_docs)
 
 # 设置入口点
 internal_retrieval_agent.set_entry_point("analyze_intent_and_extract_drugs")
 
 # 添加边
-# internal_retrieval_agent.add_edge("analyze_intent_and_extract_drugs", END)
-
 internal_retrieval_agent.add_edge("analyze_intent_and_extract_drugs", "retrieve_docs")
-internal_retrieval_agent.add_edge("retrieve_docs", "format_results")
-internal_retrieval_agent.add_edge("format_results", END)
+internal_retrieval_agent.add_edge("retrieve_docs", END)
 
 # 编译图并添加MemorySaver
 internal_retrieval_agent = internal_retrieval_agent.compile(checkpointer=MemorySaver())
