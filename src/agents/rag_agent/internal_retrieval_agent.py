@@ -24,13 +24,9 @@ target_path = os.path.join(current_dir, '..', '..', '..', 'data')
 # file_path = os.path.normpath(target_path)
 
 DATA_PATH = "../../../data"
-# TEXT_FILE = "../../../data/drugsComSentiment.tsv"
 TEXT_FILE = os.path.normpath(os.path.join(target_path, 'drugsComSentiment.tsv'))
-# EMBEDDING_FILE = f"{DATA_PATH}/embeddings.npy"
 EMBEDDING_FILE = os.path.normpath(os.path.join(target_path, 'embeddings.npy'))
-# TEXT_CACHE_FILE = f"{DATA_PATH}/text_cache.npy"
 TEXT_CACHE_FILE = os.path.normpath(os.path.join(target_path, 'text_cache.npy'))
-# INDEX_FILE = f"{DATA_PATH}/faiss_index.index"
 INDEX_FILE = os.path.normpath(os.path.join(target_path, 'faiss_index.index'))
 MODEL_NAME = 'all-MiniLM-L6-v2'  # 平衡速度和精度的模型
 BATCH_SIZE = 128  # 批处理加速编码ChatPromptTemplate
@@ -72,7 +68,7 @@ def load_or_build():
 	with open(TEXT_FILE, 'r', encoding='utf-8') as f:
 		reader = csv.reader(f, delimiter='\t')
 		next(reader)  # 跳过标题行
-		texts = [f"drugName:{row[1].strip()}; useCondition:{row[2].strip()}; review:{row[3].strip()}" for row in reader]
+		texts = [f"drugName:{row[1].strip()}; useCondition:{row[2].strip()}; review:{row[3].strip()}; sentiment:{row[7].strip()}" for row in reader]
 
 	print(f"Encoding {len(texts)} texts...")
 	model = SentenceTransformer(MODEL_NAME)
@@ -137,16 +133,16 @@ Available drug list: {drug_names}
 IMPORTANT: You must return ONLY a JSON object, without any markdown formatting or additional text.
 The JSON object must have the following structure:
 {{
-    "is_sales_related": boolean,  // Whether the question is related to drug sales
-    "drug_names": [string],      // Array of extracted drug names, including both directly mentioned and relevant drugs
-    "confidence": float,         // Confidence score between 0 and 1
+	"is_sales_related": boolean,  // Whether the question is related to drug sales
+	"drug_names": [string],      // Array of extracted drug names, including both directly mentioned and relevant drugs
+	"confidence": float,         // Confidence score between 0 and 1
 }}
 
 Example response (return exactly this format, nothing else):
 {{
-    "is_sales_related": true,
-    "drug_names": ["DrugA", "DrugB", "DrugC"],
-    "confidence": 0.95,
+	"is_sales_related": true,
+	"drug_names": ["DrugA", "DrugB", "DrugC"],
+	"confidence": 0.95,
 }}
 """
 
@@ -164,7 +160,7 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 		match = re.search(json_pattern, response.content)
 		if not match:
 			raise ValueError("No JSON object found in response")
-		
+
 		result = json.loads(match.group(0))
 		print(result)
 		# 如果置信度大于0.7且是销售相关的问题，添加药品销售数据到retrieved_docs
@@ -172,16 +168,16 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 			# 获取所有置信度大于0.7的药品的销售数据
 			high_confidence_drugs = result["drug_names"]
 			results = []
-			
+
 			time_data = sales_df['ds'].tolist()
-			
+
 			for i, drug in enumerate(high_confidence_drugs, 1):
 				if drug in sales_df.columns:
 					sales_data = [
 						{"date": date, "sales": sales}
 						for date, sales in zip(time_data, sales_df[drug].tolist())
 					]
-					
+
 					drug_result = {
 						"id": i,
 						"content": f"Sales data for {drug}: {json.dumps(sales_data, ensure_ascii=False)}",
@@ -207,40 +203,40 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 
 
 def normalize_confidence(question: str, distances: List[float]) -> List[float]:
-    """将匹配的知识根据内积计算置信度"""
-    if not distances:
-        return []
-        
-    # 设置最小置信度阈值
-    MIN_CONFIDENCE = 0.1
-    
-    # 使用问题与自身的相似度作为理论最大值
-    question_embedding = model.encode([question], convert_to_tensor=False)[0]
-    theoretical_max = np.dot(question_embedding, question_embedding)
-    
-    # 将内积值归一化到[0, 1]区间
-    normalized_distances = [d / theoretical_max for d in distances]
-    
-    # 如果所有值都相同，返回最小置信度
-    if len(set(normalized_distances)) == 1:
-        return [MIN_CONFIDENCE] * len(distances)
-    
-    # 使用softmax进行归一化，保留相对关系
-    exp_distances = np.exp(np.array(normalized_distances))
-    softmax_distances = exp_distances / exp_distances.sum()
-    
-    # 将softmax结果映射到[MIN_CONFIDENCE, 1.0]区间
-    confidence_scores = MIN_CONFIDENCE + (1.0 - MIN_CONFIDENCE) * softmax_distances
-    
-    return confidence_scores.tolist()
+	"""将匹配的知识根据内积计算置信度"""
+	if not distances:
+		return []
+
+	# 设置最小置信度阈值
+	MIN_CONFIDENCE = 0.1
+
+	# 使用问题与自身的相似度作为理论最大值
+	question_embedding = model.encode([question], convert_to_tensor=False)[0]
+	theoretical_max = np.dot(question_embedding, question_embedding)
+
+	# 将内积值归一化到[0, 1]区间
+	normalized_distances = [d / theoretical_max for d in distances]
+
+	# 如果所有值都相同，返回最小置信度
+	if len(set(normalized_distances)) == 1:
+		return [MIN_CONFIDENCE] * len(distances)
+
+	# 使用softmax进行归一化，保留相对关系
+	exp_distances = np.exp(np.array(normalized_distances))
+	softmax_distances = exp_distances / exp_distances.sum()
+
+	# 将softmax结果映射到[MIN_CONFIDENCE, 1.0]区间
+	confidence_scores = MIN_CONFIDENCE + (1.0 - MIN_CONFIDENCE) * softmax_distances
+
+	return confidence_scores.tolist()
 
 
 async def retrieve_docs(state: InternalRetrievalState, config: RunnableConfig) -> InternalRetrievalState:
 	"""Retrieve internal documents"""
 	question = state["messages"][-1].content
-	
+
 	search_results = search(question, top_k=3)
-	
+
 	distances = [result["distance"] for result in search_results]
 	normalized_confidences = normalize_confidence(question, distances)
 
@@ -254,10 +250,10 @@ async def retrieve_docs(state: InternalRetrievalState, config: RunnableConfig) -
 			"confidence": float(confidence)
 		}
 		formatted_results.append(formatted_result)
-	
+
 	# 将结果添加到retrieved_docs
 	docs = existing_docs + formatted_results
-	
+
 	return {"retrieved_docs": docs}
 
 
