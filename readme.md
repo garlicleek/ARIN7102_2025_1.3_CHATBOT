@@ -21,14 +21,6 @@ This project implements an **intelligent pharmacy sales analytics chatbot** usin
 - Drug Review: https://www.kaggle.com/datasets/mohamedabdelwahabali/drugreview
 - Pharmacy Sales:
 
-**Pre-processing**:
-
-**Clustering**:
-
-**Reviews Analyse**:
-
-**Sales Analyse**:
-
 ### 2. Multi-Agent System
 **Agentic RAG Architecture**:  
 ![rag_architecture.png](media/rag_architecture.png)
@@ -80,25 +72,6 @@ GOOGLE_API_KEY=
 GROQ_API_KEY=
 ```
 
-## 🗺 Implementation Roadmap
-做完了这里可以画个甘特图
-```
-gantt
-    title Project Milestones
-    dateFormat  YYYY-MM-DD
-    section Data Layer
-    Text Data Cleaning       :
-    Time-series DB Deployment :
-    
-    section Model Layer
-    Sentiment Model Training  :
-    Hybrid Forecast Tuning    :
-    -
-    section Interaction Layer
-    Dialog Logic Development  :
-    Report Template Design     :
-```
-
 ## 📚 References
 ### 1. In Using
 - framework:https://github.com/JoshuaC215/agent-service-toolkit
@@ -118,3 +91,5 @@ preparing to use:
   - Overview: https://github.com/DSXiangLi/DecryptPrompt
   - InsightLens: https://arxiv.org/abs/2404.01644
   - Agentic RAG Framework: https://github.com/asinghcsu/AgenticRAG-Survey
+
+需要提醒首次运行时间很长

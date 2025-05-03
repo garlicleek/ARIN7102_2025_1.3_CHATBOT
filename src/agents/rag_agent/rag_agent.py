@@ -15,6 +15,7 @@ import json
 class RAGAgentState(MessagesState, total=False):
 	"""RAG智能体状态"""
 	question: HumanMessage
+	is_valid_question: bool
 	enhanced_question: str
 
 	retrieved_docs: List[Dict[str, Any]] | None
@@ -129,16 +130,26 @@ Enhance user questions while strictly preserving technical terms and optimizing 
    - For ambiguous queries → Activate hypothesis engine to generate a guess in pharmaceutical domain:
 		(e.g., original:"cost trend" -> enhanced:"cost trend in <guess>medicine for Type 2 Diabetes</guess>")
 
+4. **For Totally irrelevant queries**
+   - Just response the question simply and guide user to ask meaningful question
+    (e.g., original:"hello, how are you!" -> direct generate response "Hi, I'm fine, think you. I am pharmaceutical data specialist, what can I help you?")
+    
 Please return the result in the following JSON format:
 {
+	"is_valid_question": true,
     "original_question": "Original question",
-    "enhanced_question": "The question after augment, include tag <medical> and <finance>",
+    "enhanced_question": "The question after augment, include tag <medical>, <finance> or <guess>",
+}
+Or
+{
+	"is_valid_question": false,
+    "original_question": "invalid question, What's the weather",
+    "invalid_answer": "The general response, Honestly I dont know the weather today, but I can help you with health problem. What can I help you with regarding medications or healthcare data?"
 }
 IMPORTANT: You must return ONLY a JSON object, without any markdown formatting or additional text.
 """
 
 
-# TODO 生成过程过长, 用户体验差, 可以考虑改成deepseekR1一样, 将思考过程流式输出
 async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
 	print("Enhancing question semantics...")
 	# 获取原始问题
@@ -152,13 +163,23 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
 		config
 	)
 
+	print(enhanced_response.content)
 	# 解析JSON响应
 	json_pattern = r'\{[^{}]*\}'
 	match = re.search(json_pattern, enhanced_response.content)
+
 	if not match:
-		enhanced_question = enhanced_response.content
-	enhanced_question = json.loads(match.group(0))["enhanced_question"]
-	print(enhanced_question)
+		enhanced_question = original_question
+	else:
+		enhanced_question = json.loads(match.group(0)).get("enhanced_question", original_question)
+
+	if json.loads(match.group(0)).get("is_valid_question", False) is False:
+		general_answer = json.loads(match.group(0)).get("invalid_answer", "hello, what can I help you?")
+		print(general_answer)
+		return {
+			"is_valid_question": False,
+			"messages": [AIMessage(content=general_answer)]
+		}
 
 	print("Retrieval information...")
 	internal_response = await internal_retrieval_agent.ainvoke(
@@ -187,12 +208,13 @@ async def process_request(state: RAGAgentState, config: RunnableConfig) -> RAGAg
 	return {
 		"question": state["messages"][-1],
 		"enhanced_question": enhanced_question,
+		"is_valid_question": True,
 		"retrieved_docs": all_results,
 		"docs_text": json.dumps(all_results, ensure_ascii=False)
 	}
 
 
-# TODO 低质量评估结果的内容除了删除, 也应该让LLM做对应的调整, 第二次以上的evaluate应该调整策略
+# TODO 分数驱动知识调整
 async def evaluate(state: RAGAgentState, config: RunnableConfig) -> RAGAgentState:
 	"""评估响应质量"""
 	print("Evaluate information...")
@@ -268,7 +290,12 @@ rag_agent.add_node("evaluate", evaluate)
 rag_agent.add_node("summarize", summarize_responses)
 
 rag_agent.set_entry_point("process_request")
-rag_agent.add_edge("process_request", "evaluate")
+rag_agent.add_conditional_edges(
+	"process_request",
+	lambda state: "evaluate" if(
+		state.get("is_valid_question") is True
+	) else END
+)
 rag_agent.add_conditional_edges(
 	"evaluate",
 	lambda state: "evaluate" if (

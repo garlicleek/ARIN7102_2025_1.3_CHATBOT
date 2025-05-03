@@ -167,6 +167,7 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 		if result["is_sales_related"] and result["confidence"] > 0.7:
 			# 获取所有置信度大于0.7的药品的销售数据
 			high_confidence_drugs = result["drug_names"]
+			print(high_confidence_drugs)
 			results = []
 
 			time_data = sales_df['ds'].tolist()
@@ -185,6 +186,8 @@ async def analyze_intent_and_extract_drugs(state: InternalRetrievalState, config
 						"confidence": result["confidence"]
 					}
 					results.append(drug_result)
+
+			print(results)
 
 			return {
 				"retrieved_docs": results
